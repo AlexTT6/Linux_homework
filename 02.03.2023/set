@@ -1,0 +1,38 @@
+#include <iostream>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstring>
+
+int main() {
+    const char* filename = "file.txt";
+    const int mem_size = 1024;
+
+    int fd = open(filename, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+    if (fd == -1) {
+        std::cout << "Ошибка при создании файла: " << strerror(errno) << std::endl;
+        return 1;
+    }
+
+    key_t key = ftok(filename, 1);
+    if (key == -1) {
+        std::cout << "Ошибка при генерации ключа: " << strerror(errno) << std::endl;
+        close(fd);
+        return 1;
+    }
+
+    int shmid = shmget(key, mem_size, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+    if (shmid == -1) {
+        std::cout << "Ошибка при создании разделяемой памяти: " << strerror(errno) << std::endl;
+        close(fd);
+        return 1;
+    }
+
+    close(fd);
+    std::cout << "Создана разделяемая память с ID = " << shmid << std::endl;
+
+    return 0;
+}
