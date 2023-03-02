@@ -1,0 +1,41 @@
+#include <iostream>
+#include <cstdlib>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+int main() {
+    const char* path = "/tmp/my_shm";
+    const int shm_size = 1024;
+
+    
+    key_t key = ftok(path, 'R');
+    if (key == -1) {
+        perror("ftok error");
+        exit(1);
+    }
+
+  
+    int shm_id = shmget(key, shm_size, 0);
+    if (shm_id == -1) {
+        perror("shmget error");
+        exit(1);
+    }
+
+    
+    if (shmctl(shm_id, IPC_RMID, nullptr) == -1) {
+        perror("shmctl error");
+        exit(1);
+    }
+
+    
+    if (unlink(path) == -1) {
+        perror("unlink error");
+        exit(1);
+    }
+
+    std::cout << "Разделяемый сегмент и файл удалены." << std::endl;
+
+    return 0;
+}
