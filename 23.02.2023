@@ -1,0 +1,59 @@
+#include <iostream>
+#include <thread>
+#include <pthread.h>
+
+pthread_mutex_t count_mutex;
+pthread_cond_t count_cv;
+bool ready = false;
+int count = 0;
+
+void input_thread()
+{
+int ch;
+while ((ch = std::cin.get())!=EOF)
+{
+pthread_mutex_lock(&count_mutex);
+++count;
+if(count >10 && !ready)
+{
+std::cout<< ">10\n";
+ready = true;
+pthread_cond_signal(&count_cv);
+}
+if (count > 50)
+{
+pthread_cond_signal(&count_cv);
+pthread_mutex_unlock(&count_mutex);
+return;
+}
+pthread_mutex_unlock(&count_mutex);
+}
+pthread_cond_signal(&count_cv);
+}
+void output_thread()
+{
+pthread_mutex_lock(&count_mutex);
+while(!ready){
+pthread_cond_wait(&count_cv, &count_mutex);
+}
+std::cout << "Count >10\n";
+while (count <= 50){
+pthread_cond_wait(&count_cv, &count_mutex);
+}
+std::cout<<"COunt>50\n";
+pthread_mutex_unlock(&count_mutex);
+}
+int main()
+{
+pthread_t input_thread_id, output_thread_id;
+pthread_mutex_init(&count_mutex, NULL);
+pthread_cond_init(&count_cv, NULL);
+pthread_create(&input_thread_id, NULL,(void*(*)(void*))input_thread, NULL);
+pthread_create(&output_thread_id, NULL, (void*(*)(void*))output_thread, NULL);
+
+pthread_join(input_thread_id,NULL);
+pthread_join(output_thread_id, NULL);
+std::cout<<count<<"characters\n";
+pthread_mutex_destroy(&count_mutex);
+pthread_cond_destroy(&count_cv);
+return 0;
