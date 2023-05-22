@@ -13,6 +13,6 @@ EXEC = qsort
 	./$(EXEC) < tests/test4.txt
 	./$(EXEC) < tests/test5.txt
 	gcov qsort.c
-
+clean:
 	rm -f $(EXEC) *.gc* coverage.txt
 
