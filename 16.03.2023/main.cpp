@@ -16,16 +16,16 @@ int main(int argc, char *argv[]) {
   if (strcmp(command, "init") == 0) {
     try {
       Manager::init(path);
-      std::cout << "Resources initialized successfully.\n";
+      std::cout << "Иницализация рессурсов прошла ВЕЛИКОЛЕПНО\n";
     } catch (const std::exception &e) {
-      std::cerr << "Failed to initialize resources: " << e.what() << std::endl;
+      std::cerr << "Fail " << e.what() << std::endl;
     }
   } else if (strcmp(command, "destroy") == 0) {
     try {
       Manager::destroy(path);
-      std::cout << "Resources destroyed successfully.\n";
+      std::cout << "Рессурсы уничтожены\n";
     } catch (const std::exception &e) {
-      std::cerr << "Failed to destroy resources: " << e.what() << std::endl;
+      std::cerr << "Fail " << e.what() << std::endl;
     }
   } else if (strcmp(command, "rw") == 0) {
     if (argc < 5) {
@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
         manager.reader();
         return 0;
       } else if (pid < 0) {
-        std::cerr << "Failed to fork process.\n";
+        std::cerr << "Error.\n";
         return 1;
       }
     }
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
         manager.writer(i);
         return 0;
       } else if (pid < 0) {
-        std::cerr << "Failed to fork process.\n";
+        std::cerr << "Ошибка при форке.\n";
         return 1;
       }
     }
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
       wait(nullptr);
     }
   } else {
-    std::cerr << "Unknown command: " << command << std::endl;
+    std::cerr << "Неизвестная команда " << command << std::endl;
     return 1;
   }
 
