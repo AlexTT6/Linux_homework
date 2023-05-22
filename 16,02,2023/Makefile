@@ -1,18 +1,32 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -coverage
-EXEC = qsort
+CFLAGS = -Wall -Wextra -pedantic -O0 -g --coverage
 
-	$(CC) $(CFLAGS) qsort.c -o $(EXEC)
+TARGET = qsort
 
-	$(CC) $(CFLAGS) -g qsort.c -o $(EXEC)
+SRCS = qsort.c
+OBJS = $(SRCS:.c=.o)
 
-	$(CC) $(CFLAGS) qsort.c -o $(EXEC)
-	./$(EXEC) < tests/test1.txt
-	./$(EXEC) < tests/test2.txt
-	./$(EXEC) < tests/test3.txt
-	./$(EXEC) < tests/test4.txt
-	./$(EXEC) < tests/test5.txt
-	gcov qsort.c
+.PHONY: all clean
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) $^ -o $@
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
 clean:
-	rm -f $(EXEC) *.gc* coverage.txt
+	rm -f $(OBJS) $(TARGET) *.gcov *.gcda *.gcno *.info *.o html -r
 
+test:
+	./$(TARGET) < test1.txt
+	./$(TARGET) < test2.txt
+	./$(TARGET) < test3.txt
+	./$(TARGET) < test4.txt
+	./$(TARGET) < test5.txt
+	
+
+coverage:
+	lcov --rc lcov_branch_coverage=1 -c -d . -o coverage.info
+	genhtml --branch-coverage coverage.info -o html
