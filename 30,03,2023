@@ -1,0 +1,150 @@
+#include <iostream>
+#include <cstdlib>
+#include <cstring>
+#include <pthread.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <sys/ipc.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdexcept>
+
+static constexpr std::size_t BUF_SIZE{4};
+static constexpr const char* TOKEN_FILE{"token_file.tok"};
+
+struct Buffer {
+    int write_index;
+    int read_index;
+    int data[BUF_SIZE];
+};
+
+void put_item(int value, Buffer& buffer) {
+    buffer.data[buffer.write_index] = value;
+    buffer.write_index = (buffer.write_index + 1) % BUF_SIZE;
+}
+
+int get_item(Buffer& buffer) {
+    int res = buffer.data[buffer.read_index];
+    buffer.read_index = (buffer.read_index + 1) % BUF_SIZE;
+    return res;
+}
+
+int main(int argc, char** argv) {
+    int N = std::atoi(argv[1]);
+    int M = std::atoi(argv[2]);
+
+    if (creat(TOKEN_FILE, 0600) == -1) {
+        throw std::logic_error{"creat"};
+    }
+
+    int token = ftok(TOKEN_FILE, 7);
+    if (token == -1) {
+        throw std::logic_error{"ftok"};
+    }
+
+    int shm_id = shmget(token, sizeof(Buffer), IPC_CREAT | 0600);
+    if (shm_id == -1) {
+        throw std::logic_error{"shmget"};
+    }
+
+    Buffer* shared_buffer = reinterpret_cast<Buffer*>(shmat(shm_id, nullptr, 0));
+    shared_buffer->write_index = 0;
+    shared_buffer->read_index = 0;
+
+    int sem_id = semget(token, 3, IPC_CREAT | 0600);
+
+
+    if (sem_id == -1) {
+        throw std::logic_error{"semget"};
+    }
+
+    struct sembuf init[] {
+        {0, BUF_SIZE, 0},
+        {2, 1, 0}
+    };
+    if (semop(sem_id, init, sizeof(init) / sizeof(*init)) == -1) {
+        throw std::logic_error{"semaphor error"};
+    }
+
+    struct sembuf mutex_lock {
+        2, -1, 0
+    };
+    struct sembuf mutex_unlock {
+        2, 1, 0
+    };
+
+    for (int i{}; i < N; i++) {
+        struct sembuf reserve {
+            0, -1, 0
+        };
+        struct sembuf add_item {
+            1, 1, 0
+        };
+        if (fork() == 0) {  // Producer process
+            if (semop(sem_id, &reserve, 1) == -1) {
+                throw std::logic_error{"couldn't reserve"};
+            }
+
+            if (semop(sem_id, &mutex_lock, 1) == -1) {
+                throw std::logic_error{"lock"};
+            }
+
+            put_item(i + 1, *shared_buffer);
+
+            if (semop(sem_id, &mutex_unlock, 1) == -1) {
+                throw std::logic_error{"open"};
+            }
+
+            if (semop(sem_id, &add_item, 1) == -1) {
+                throw std::logic_error{"error"};
+            }
+
+            return 0;
+        }
+    }
+
+    for (int i{}; i < M; i++) {
+        struct sembuf release {
+            0, 1, 0
+        };
+        struct sembuf remove_item {
+            1, -1, 0
+        };
+        if (fork() == 0) {  // Consumer process
+            if (semop(sem_id, &remove_item, 1) == -1) {
+                throw std::logic_error{"error"};
+            }
+
+            if (semop(sem_id, &mutex_lock, 1) == -1) {
+                throw std::logic_error{"mutex lock"};
+            }
+
+            int item = get_item(*shared_buffer);
+            std::cout << item << std::endl;
+
+            if (semop(sem_id, &mutex_unlock, 1) == -1) {
+                throw std::logic_error{"mutex unlock"};
+            }
+
+            if (semop(sem_id, &release, 1) == -1) {
+                throw std::logic_error{"error"};
+            }
+
+            return 0;
+        }
+    }
+
+    for (int i{}; i < N + M; i++) {
+        wait(nullptr);
+    }
+
+    shmctl(shm_id, IPC_RMID, nullptr);
+    semctl(sem_id, 3, IPC_RMID, nullptr);
+
+    if (unlink(TOKEN_FILE) == -1) {
+        throw std::logic_error{"unlink"};
+    }
+
+    return 0;
+}
