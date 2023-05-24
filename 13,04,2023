@@ -1,0 +1,115 @@
+#include <iostream>
+#include <string>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <signal.h>
+
+static constexpr int BUFFER_SIZE{1024};
+static constexpr const char* SOCKET_FILE{"local_socket.sock"};
+
+int socket_fd;
+
+void handle_sigint(int signum) {
+    if (unlink(SOCKET_FILE) == -1) {
+        perror("unlink");
+    }
+    close(socket_fd);
+    exit(0);
+}
+void receive_messages() {
+    while (true) {
+        char buffer[BUFFER_SIZE];
+        struct sockaddr_un sender_addr;
+        socklen_t sender_addr_length = sizeof(sender_addr);
+        ssize_t recv_size = recvfrom(socket_fd, buffer, sizeof(buffer) - 1, 0,
+                                     reinterpret_cast<struct sockaddr*>(&sender_addr), &sender_addr_length);
+        if (recv_size == -1) {
+            perror("recvfrom");
+            continue;
+        }
+        buffer[recv_size] = '\0';
+        std::string message(buffer);
+        std::string sender_address(sender_addr.sun_path);
+        std::cout << "Получено сообщение '" << message << "' от " << sender_address << std::endl;
+    }
+}
+
+int main(int argc, char** argv) {
+    if (signal(SIGINT, handle_sigint) == SIG_ERR) {
+        perror("signal");
+        return 1;
+    }
+    socket_fd = socket(AF_LOCAL, SOCK_DGRAM, 0);
+    if (socket_fd == -1) {
+        perror("socket");
+        return 1;
+    }
+    struct sockaddr_un address;
+    std::memset(&address, 0, sizeof(address));
+    address.sun_family = AF_LOCAL;
+    std::strcpy(address.sun_path, SOCKET_FILE);
+
+    if (bind(socket_fd, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) == -1) {
+        perror("bind");
+        close(socket_fd);
+        return 1;
+    }
+    std::cout << "Локальный чат запущен. Ожидание сообщений..." << std::endl;
+
+    std::thread receive_thread(receive_messages);
+
+    if (argc > 1) {
+        std::string client_name(argv[1]);
+
+        while (std::cin.good()) {
+            std::string receiver_address, message;
+            std::cin >> receiver_address >> message;
+
+            if (receiver_address.empty() || message.empty()) {
+                break;
+            }
+            struct sockaddr_un receiver_addr;
+            std::memset(&receiver_addr, 0, sizeof(receiver_addr));
+            receiver_addr.sun_family = AF_LOCAL;
+            std::strcpy(receiver_addr.sun_path, receiver_address.c_str());
+
+            ssize_t send_size = sendto(socket_fd, message.c_str(), message.length(), 0,
+           reinterpret_cast<struct sockaddr*>(&receiver_addr), sizeof(receiver_addr));
+            if (send_size == -1) {
+                perror("sendto");
+            }
+        }
+    } else {
+        std::cout << "Не указано имя клиента. Сообщения будут отправляться анонимно." << std::endl;
+        std::cout << "Для выхода нажмите Ctrl+C." << std::endl;
+        while (std::cin.good()) {
+            std::string message;
+            std::getline(std::cin, message);
+
+            if (message.empty()) {
+                continue;
+            }
+            struct sockaddr_un receiver_addr;
+            std::memset(&receiver_addr, 0, sizeof(receiver_addr));
+            receiver_addr.sun_family = AF_LOCAL;
+            std::strcpy(receiver_addr.sun_path, SOCKET_FILE);
+            ssize_t send_size = sendto(socket_fd, message.c_str(), message.length(), 0,
+             reinterpret_cast<struct sockaddr*>(&receiver_addr), sizeof(receiver_addr));
+            if (send_size == -1) {
+                perror("sendto");
+            }
+        }
+    }
+    receive_thread.join();
+
+    close(socket_fd);
+
+    if (unlink(SOCKET_FILE) == -1) {
+        perror("unlink");
+    }
+
+    return 0;
+}
